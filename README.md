@@ -19,7 +19,7 @@
 
 ## 🎯 About
 
-ExpenseFlow is a comprehensive personal finance management application demonstrating modern Android development with Jetpack Compose. Built as part of my migration from Flutter to native Android development, this project showcases advanced UI patterns, real-time data visualization, and reactive state management using Kotlin flows.
+ExpenseFlow is a comprehensive personal finance management application demonstrating modern Android development with Jetpack Compose. This project showcases advanced UI patterns, real-time data visualization, custom chart components, reactive state management, and complex form handling with validation.
 
 ---
 
@@ -40,21 +40,21 @@ ExpenseFlow is a comprehensive personal finance management application demonstra
 
 ## 🛠️ Tech Stack
 
-| Category | Technology | Flutter Analogy |
-|----------|------------|-----------------|
-| **Language** | Kotlin 1.9.0 | Dart |
-| **UI Framework** | Jetpack Compose (No XML) | Flutter Widgets |
-| **Architecture** | MVVM + Repository Pattern | BLoC / Provider |
-| **Dependency Injection** | Hilt | get_it / Provider |
-| **Database** | Room (Local SQLite) | sqflite / Drift |
-| **Async** | Kotlinx Coroutines + Flows | Future / Stream |
-| **State Management** | State / remember / ViewModel | ChangeNotifier / setState |
-| **Data Viz** | Custom Canvas Charts | fl_chart |
-| **Date/Time** | kotlinx.datetime | intl |
-| **Formatting** | NumberFormat/DecimalFormat | NumberFormat |
-| **Min SDK** | 24 (Android 7.0+) | iOS 11+, Android 5.0+ |
-| **Target SDK** | 35 | Latest iOS/Android |
-| **Branding** | Beniel Studio | Custom branding |
+| Category | Technology |
+|----------|------------|
+| **Language** | Kotlin 1.9.0 |
+| **UI Framework** | Jetpack Compose (No XML) |
+| **Architecture** | MVVM + Repository Pattern |
+| **Dependency Injection** | Hilt |
+| **Database** | Room (Local SQLite) |
+| **Async** | Kotlinx Coroutines + Flows |
+| **State Management** | State / remember / ViewModel |
+| **Data Viz** | Custom Canvas Charts |
+| **Date/Time** | kotlinx.datetime |
+| **Formatting** | NumberFormat/DecimalFormat |
+| **Min SDK** | 24 (Android 7.0+) |
+| **Target SDK** | 35 |
+| **Branding** | Beniel Studio |
 
 ---
 
@@ -92,142 +92,98 @@ ExpenseFlow is a comprehensive personal finance management application demonstra
 └─────────────────────────────────────┘
 ```
 
-**Flutter Parallel:** Same layered architecture as BLoC pattern - UI → Cubits/BLoCs → Repositories → Data Sources
-
 ---
 
-## 🔄 Flutter to Jetpack Compose: Key Concepts
+## 🎯 Jetpack Compose Expertise
 
-### Form Handling with Validation
+### Advanced Compose Patterns
 
-**Flutter (Form + TextEditingController):**
-```dart
-class AddTransactionForm extends StatefulWidget {
-  @override
-  _AddTransactionFormState createState() => _AddTransactionFormState();
-}
+#### 1. Form Handling with Custom Validation
 
-class _AddTransactionFormState extends State<AddTransactionForm> {
-  final _formKey = GlobalKey<FormState>();
-  final _amountController = TextEditingController();
-  final _categoryController = TextEditingController();
-  
-  @override
-  Widget build(BuildContext context) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        children: [
-          TextFormField(
-            controller: _amountController,
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter an amount';
-              }
-              return null;
-            },
-            decoration: InputDecoration(labelText: 'Amount'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (_formKey.currentState!.validate()) {
-                // Submit form
-              }
-            },
-            child: Text('Add Transaction'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-```
-
-**Jetpack Compose (TextField + State):**
 ```kotlin
+@Immutable
+data class TransactionFormState(
+    val amount: String = "",
+    val category: String = "",
+    val description: String = "",
+    val date: LocalDate = Clock.System.now().toLocalDateTime(TimeZone.UTC).date,
+    val amountError: String? = null,
+    val categoryError: String? = null,
+    val isValid: Boolean = false
+)
+
 @Composable
-fun AddTransactionForm(
-    onSubmit: (Transaction) -> Unit
-) {
+fun rememberTransactionFormState(): TransactionFormState {
     var amount by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
-    var amountError by remember { mutableStateOf<String?>(null) }
+    var description by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf(LocalDate.now()) }
     
-    Column(
-        modifier = Modifier.padding(16.dp)
-    ) {
-        OutlinedTextField(
-            value = amount,
-            onValueChange = { 
-                amount = it
-                amountError = null
-            },
-            label = { Text("Amount") },
-            isError = amountError != null,
-            supportingText = amountError?.let { { Text(it) } },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-        )
-        
-        OutlinedTextField(
-            value = category,
-            onValueChange = { category = it },
-            label = { Text("Category") }
-        )
-        
-        Button(
-            onClick = {
-                if (amount.isBlank()) {
-                    amountError = "Please enter an amount"
-                } else {
-                    onSubmit(Transaction(
-                        amount = amount.toDoubleOrNull() ?: 0.0,
-                        category = category
-                    ))
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Add Transaction")
+    val amountError by remember(amount) {
+        derivedStateOf {
+            when {
+                amount.isBlank() -> "Please enter an amount"
+                amount.toDoubleOrNull() == null -> "Invalid amount"
+                amount.toDoubleOrNull()!! <= 0 -> "Amount must be positive"
+                else -> null
+            }
         }
+    }
+    
+    val categoryError by remember(category) {
+        derivedStateOf {
+            when {
+                category.isBlank() -> "Please select a category"
+                else -> null
+            }
+        }
+    }
+    
+    val isValid by remember(amount, category, amountError, categoryError) {
+        derivedStateOf {
+            amountError == null && categoryError == null && 
+            amount.isNotBlank() && category.isNotBlank()
+        }
+    }
+    
+    return remember(amount, category, description, date, amountError, categoryError, isValid) {
+        TransactionFormState(
+            amount = amount,
+            category = category,
+            description = description,
+            date = date,
+            amountError = amountError,
+            categoryError = categoryError,
+            isValid = isValid
+        )
     }
 }
 ```
 
-### Data Visualization - Charts
+#### 2. Custom Chart Component with Canvas
 
-**Flutter (fl_chart):**
-```dart
-class ExpenseChart extends StatelessWidget {
-  final List<Transaction> transactions;
-  
-  @override
-  Widget build(BuildContext context) {
-    final grouped = _groupByCategory(transactions);
-    
-    return PieChart(
-      PieChartData(
-        sections: grouped.entries.map((entry) {
-          return PieChartSectionData(
-            value: entry.value,
-            title: entry.key,
-            color: _getCategoryColor(entry.key),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-```
-
-**Jetpack Compose (Custom Canvas):**
 ```kotlin
 @Composable
 fun ExpensePieChart(
     transactions: List<Transaction>,
     modifier: Modifier = Modifier
 ) {
-    val grouped = transactions.groupBy { it.category }
-        .mapValues { it.value.sumOf { it.amount } }
+    val theme = MaterialTheme.colorScheme
+    
+    // Group transactions by category and calculate totals
+    val groupedData by remember(transactions) {
+        derivedStateOf {
+            transactions
+                .groupBy { it.category }
+                .mapValues { (_, items) -> items.sumOf { it.amount } }
+                .toList()
+                .sortedByDescending { it.second }
+        }
+    }
+    
+    val totalAmount by remember(groupedData) {
+        derivedStateOf { groupedData.sumOf { it.second } }
+    }
     
     Canvas(
         modifier = modifier
@@ -235,631 +191,939 @@ fun ExpensePieChart(
             .height(300.dp)
     ) {
         val center = Offset(size.width / 2, size.height / 2)
-        val radius = min(size.width, size.height) / 2
-        var startAngle = 0f
+        val radius = min(size.width, size.height) / 2 * 0.8f
+        var startAngle = -90f
         
-        grouped.forEach { (category, amount) ->
-            val sweepAngle = (amount / grouped.values.sum() * 360).toFloat()
+        groupedData.forEachIndexed { index, (category, amount) ->
+            val sweepAngle = (amount / totalAmount * 360).toFloat()
+            val color = categoryColor(index, theme)
             
+            // Draw pie slice
             drawArc(
-                color = getCategoryColor(category),
+                color = color,
                 startAngle = startAngle,
                 sweepAngle = sweepAngle,
                 useCenter = true,
                 topLeft = Offset(center.x - radius, center.y - radius),
-                size = Size(radius * 2, radius * 2)
+                size = Size(radius * 2, radius * 2),
+                style = Fill
             )
+            
+            // Draw percentage label
+            if (sweepAngle > 15f) {
+                val labelAngle = Math.toRadians((startAngle + sweepAngle / 2).toDouble())
+                val labelRadius = radius * 0.65f
+                val labelX = center.x + labelRadius * cos(labelAngle).toFloat()
+                val labelY = center.y + labelRadius * sin(labelAngle).toFloat()
+                
+                val percentage = ((amount / totalAmount) * 100).toInt()
+                drawText(
+                    textMeasurer = TextMeasurer(),
+                    text = AnnotatedString("$percentage%"),
+                    topLeft = Offset(labelX, labelY),
+                    style = TextStyle(
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                )
+            }
             
             startAngle += sweepAngle
         }
-    }
-}
-```
-
-### Real-time Statistics with Flows
-
-**Flutter (StreamBuilder):**
-```dart
-class StatisticsScreen extends StatelessWidget {
-  final TransactionBloc bloc;
-  
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<StatisticsState>(
-      stream: bloc.stream,
-      builder: (context, snapshot) {
-        if (snapshot.hasData) {
-          final stats = snapshot.data as StatisticsLoaded;
-          return StatisticsView(stats: stats);
-        }
-        return CircularProgressIndicator();
-      },
-    );
-  }
-}
-```
-
-**Jetpack Compose (collectAsState):**
-```kotlin
-@Composable
-fun StatisticsScreen(
-    viewModel: StatisticsViewModel = hiltViewModel()
-) {
-    val stats by viewModel.statistics.collectAsState()
-    
-    when (stats) {
-        is StatisticsState.Loading -> {
-            CircularProgressIndicator()
-        }
-        is StatisticsState.Success -> {
-            StatisticsView(
-                totalExpenses = (stats as StatisticsState.Success).totalExpenses,
-                categoryBreakdown = (stats as StatisticsState.Success).breakdown
-            )
-        }
-        is StatisticsState.Error -> {
-            ErrorMessage(
-                message = (stats as StatisticsState.Error).message
-            )
-        }
-    }
-}
-```
-
-### Reactive Category Selection
-
-**Flutter (Provider):**
-```dart
-class CategoryFilter extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final filter = Provider.of<FilterProvider>(context);
-    
-    return Wrap(
-      children: filter.categories.map((category) {
-        return FilterChip(
-          label: Text(category),
-          selected: filter.selectedCategory == category,
-          onSelected: (selected) {
-            filter.setCategory(selected ? category : null);
-          },
-        );
-      }).toList(),
-    );
-  }
-}
-```
-
-**Jetpack Compose (Hoisted State):**
-```kotlin
-@Composable
-fun CategoryFilter(
-    selectedCategory: String?,
-    onCategorySelected: (String?) -> Unit,
-    categories: List<String>
-) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(categories) { category ->
-            FilterChip(
-                selected = selectedCategory == category,
-                onClick = { 
-                    onCategorySelected(
-                        if (selectedCategory == category) null else category
-                    )
-                },
-                label = { Text(category) },
-                leadingIcon = if (selectedCategory == category) {
-                    { Icon(Icons.Filled.Check, contentDescription = null) }
-                } else null
-            )
-        }
-    }
-}
-```
-
-### Date Range Picker
-
-**Flutter (showDateRangePicker):**
-```dart
-Future<void> _selectDateRange() async {
-  final picked = await showDateRangePicker(
-    context: context,
-    firstDate: DateTime(2020),
-    lastDate: DateTime.now(),
-  );
-  
-  if (picked != null) {
-    setState(() {
-      dateRange = picked;
-    });
-  }
-}
-```
-
-**Jetpack Compose (DatePickerDialog):**
-```kotlin
-@Composable
-fun DateRangePicker(
-    onRangeSelected: (Pair<LocalDate, LocalDate>?) -> Unit
-) {
-    val context = LocalContext.current
-    
-    var startDate by remember { mutableStateOf<LocalDate?>(null) }
-    var endDate by remember { mutableStateOf<LocalDate?>(null) }
-    
-    val datePickerDialog = DatePickerDialog(
-        context,
-        { _, year, month, day ->
-            val date = LocalDate.of(year, month + 1, day)
-            if (startDate == null || (startDate != null && endDate != null)) {
-                startDate = date
-                endDate = null
-            } else {
-                endDate = date
-                onRangeSelected(Pair(startDate!!, date))
-            }
-        },
-        year,
-        month,
-        day
-    )
-    
-    Button(onClick = { datePickerDialog.show() }) {
-        Text("Select Date Range")
-    }
-}
-```
-
-### Currency Formatting
-
-**Flutter (NumberFormat):**
-```dart
-String formatCurrency(double amount) {
-  final formatter = NumberFormat.currency(
-    locale: 'en_US',
-    symbol: '\$',
-    decimalDigits: 2,
-  );
-  return formatter.format(amount);
-}
-```
-
-**Jetpack Compose (NumberFormat):**
-```kotlin
-fun formatCurrency(amount: Double, locale: Locale = Locale.US): String {
-    return NumberFormat.getCurrencyInstance(locale).apply {
-        maximumFractionDigits = 2
-        minimumFractionDigits = 2
-    }.format(amount)
-}
-
-@Composable
-fun CurrencyText(amount: Double) {
-    val locale = Locale.getDefault()
-    Text(
-        text = formatCurrency(amount, locale),
-        style = MaterialTheme.typography.headlineSmall
-    )
-}
-```
-
-### Animated List with Transitions
-
-**Flutter (AnimatedList):**
-```dart
-AnimatedList(
-  initialItemCount: transactions.length,
-  itemBuilder: (context, index, animation) {
-    return SlideTransition(
-      position: animation.drive(
-        Tween(begin: Offset(1, 0), end: Offset.zero)
-          .chain(CurveTween(curve: Curves.easeInOut)),
-      ),
-      child: TransactionTile(transactions[index]),
-    );
-  },
-)
-```
-
-**Jetpack Compose (AnimatedVisibility):**
-```kotlin
-@Composable
-fun AnimatedTransactionList(
-    transactions: List<Transaction>
-) {
-    LazyColumn {
-        items(
-            items = transactions,
-            key = { it.id }
-        ) { transaction ->
-            AnimatedVisibility(
-                visible = true,
-                enter = slideInHorizontally() + fadeIn(),
-                exit = slideOutHorizontally() + fadeOut()
-            ) {
-                TransactionTile(transaction = transaction)
-            }
-        }
-    }
-}
-```
-
----
-
-## 🚀 Migrando de Flutter
-
-### Conceptos Equivalentes
-
-| Flutter | Jetpack Compose | Notes |
-|---------|-----------------|-------|
-| `Form` | `TextField + State` | Manual validation, more control |
-| `TextEditingController` | `mutableStateOf<String>` | Direct state binding |
-| `FormValidator` | Custom validator functions | More flexible validation logic |
-| `StreamBuilder` | `collectAsState()` | Reactive data flows |
-| `fl_chart` | Custom `Canvas` / `Compose Charts` | More control, less abstraction |
-| `intl` package | `kotlinx.datetime` | Built-in date/time support |
-| `provider` package | `Hilt` + `ViewModel` | Better compile-time safety |
-| `showDatePicker` | `DatePickerDialog` | Native Android picker |
-| `AnimatedList` | `AnimatedVisibility` | Easier animations |
-| `showBottomSheet` | `BottomSheetScaffold` | Built-in bottom sheet support |
-| `SnackBar` | `SnackbarHost` | Better API for snackbars |
-
-### Tips de Migración
-
-#### 1. **Form State Management**
-Compose gives you more direct control over form state:
-
-```kotlin
-@Composable
-fun FormWithValidation() {
-    var email by remember { mutableStateOf("") }
-    var emailError by remember { mutableStateOf<String?>(null) }
-    var password by remember { mutableStateOf("") }
-    var passwordError by remember { mutableStateOf<String?>(null) }
-    
-    Column {
-        OutlinedTextField(
-            value = email,
-            onValueChange = { 
-                email = it
-                emailError = if (it.contains("@")) null else "Invalid email"
-            },
-            label = { Text("Email") },
-            isError = emailError != null,
-            supportingText = emailError?.let { { Text(it) } }
-        )
         
-        OutlinedTextField(
-            value = password,
-            onValueChange = { 
-                password = it
-                passwordError = if (it.length >= 8) null else "Too short"
-            },
-            label = { Text("Password") },
-            visualTransformation = PasswordVisualTransformation(),
-            isError = passwordError != null
+        // Draw center hole for donut chart effect
+        drawCircle(
+            color = theme.surface,
+            radius = radius * 0.4f,
+            center = center
         )
     }
 }
 ```
 
-#### 2. **Data Visualization**
-Compose Canvas gives you full control over custom charts:
+#### 3. Reactive Statistics with Flows
 
 ```kotlin
-@Composable
-fun LineChart(
-    data: List<Pair<Double, Double>>,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        val padding = 40.dp.toPx()
-        val width = size.width - padding * 2
-        val height = size.height - padding * 2
-        
-        // Draw axes
-        drawLine(
-            color = Color.Gray,
-            start = Offset(padding, size.height - padding),
-            end = Offset(size.width - padding, size.height - padding),
-            strokeWidth = 2.dp.toPx()
-        )
-        
-        // Draw data points
-        val path = Path().apply {
-            data.forEachIndexed { index, (x, y) ->
-                val px = padding + (x / 100) * width
-                val py = size.height - padding - (y / 100) * height
-                if (index == 0) moveTo(px, py) else lineTo(px, py)
-            }
-        }
-        
-        drawPath(path, Color.Blue, style = Stroke(width = 3.dp.toPx()))
-    }
-}
-```
-
-#### 3. **Real-time Aggregations with Flows**
-Combine flows for complex reactive calculations:
-
-```kotlin
+@HiltViewModel
 class StatisticsViewModel @Inject constructor(
-    private val repository: TransactionRepository
+    private val transactionRepository: TransactionRepository
 ) : ViewModel() {
     
-    val monthlyExpenses: StateFlow<Map<String, Double>> = repository
+    private val _uiState = MutableStateFlow<StatisticsUiState>(StatisticsUiState.Loading)
+    val uiState: StateFlow<StatisticsUiState> = _uiState.asStateFlow()
+    
+    // Combined flow for real-time statistics
+    val monthlyExpenses: StateFlow<Map<Int, Double>> = transactionRepository
         .getAllTransactions()
         .map { transactions ->
-            transactions.groupByMonth()
-                .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+            transactions
+                .filter { it.type == TransactionType.EXPENSE }
+                .groupBy { it.date.monthNumber }
+                .mapValues { (_, items) -> items.sumOf { it.amount } }
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
             initialValue = emptyMap()
         )
+    
+    // Derived flow for category breakdown
+    val categoryBreakdown: StateFlow<Map<String, Double>> = transactionRepository
+        .getAllTransactions()
+        .map { transactions ->
+            transactions
+                .filter { it.type == TransactionType.EXPENSE }
+                .groupBy { it.category }
+                .mapValues { (_, items) -> items.sumOf { it.amount } }
+                .toList()
+                .sortedByDescending { it.second }
+                .take(5)
+                .toMap()
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyMap()
+        )
+    
+    init {
+        loadStatistics()
+    }
+    
+    private fun loadStatistics() {
+        viewModelScope.launch {
+            _uiState.value = StatisticsUiState.Loading
+            
+            try {
+                val transactions = transactionRepository.getAllTransactions().first()
+                val totalIncome = transactions
+                    .filter { it.type == TransactionType.INCOME }
+                    .sumOf { it.amount }
+                val totalExpenses = transactions
+                    .filter { it.type == TransactionType.EXPENSE }
+                    .sumOf { it.amount }
+                
+                _uiState.value = StatisticsUiState.Success(
+                    totalIncome = totalIncome,
+                    totalExpenses = totalExpenses,
+                    balance = totalIncome - totalExpenses
+                )
+            } catch (e: Exception) {
+                _uiState.value = StatisticsUiState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+}
+
+@Immutable
+sealed class StatisticsUiState {
+    data object Loading : StatisticsUiState()
+    data class Success(
+        val totalIncome: Double,
+        val totalExpenses: Double,
+        val balance: Double
+    ) : StatisticsUiState()
+    data class Error(val message: String) : StatisticsUiState()
 }
 ```
 
-#### 4. **Animation API**
-Compose animations are more declarative:
+#### 4. Animated Transactions List
 
 ```kotlin
 @Composable
-fun AnimatedValueDisplay(
-    targetValue: Double,
+fun AnimatedTransactionList(
+    transactions: List<Transaction>,
+    onTransactionClick: (Transaction) -> Unit,
+    onTransactionDelete: (Transaction) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var animatedValue by remember { mutableStateOf(0.0) }
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(
+            items = transactions,
+            key = { it.id }  // Critical for stable item tracking
+        ) { transaction ->
+            var dismissed by remember { mutableStateOf(false) }
+            
+            AnimatedVisibility(
+                visible = !dismissed,
+                enter = slideInVertically(
+                    initialOffsetY = { -it },
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                ) + fadeIn(),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                ) + fadeOut()
+            ) {
+                SwipeToDismiss(
+                    state = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { dismissValue ->
+                            if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                                dismissed = true
+                                onTransactionDelete(transaction)
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                        positionalThreshold = { 150.dp.toPx() }
+                    ),
+                    background = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    color = if (transaction.type == TransactionType.INCOME) 
+                                        Color(0xFF4CAF50) 
+                                    else 
+                                        Color(0xFFF44336)
+                                )
+                                .padding(horizontal = 20.dp),
+                            contentAlignment = Alignment.CenterEnd
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                    },
+                    dismissContent = {
+                        TransactionItem(
+                            transaction = transaction,
+                            onClick = { onTransactionClick(transaction) }
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+```
+
+#### 5. Currency Formatting with CompositionLocal
+
+```kotlin
+data class CurrencyConfig(
+    val locale: Locale,
+    val symbol: String,
+    val decimalDigits: Int = 2
+)
+
+val LocalCurrencyConfig = compositionLocalOf { 
+    CurrencyConfig(Locale.US, "$", 2) 
+}
+
+@Composable
+fun ExpenseFlowTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    currencyLocale: Locale = Locale.US,
+    currencySymbol: String = "$",
+    content: @Composable () -> Unit
+) {
+    val colorScheme = if (darkTheme) {
+        darkColorScheme(
+            primary = Color(0xFF4CAF50),
+            secondary = Color(0xFF2196F3)
+        )
+    } else {
+        lightColorScheme(
+            primary = Color(0xFF4CAF50),
+            secondary = Color(0xFF2196F3)
+        )
+    }
     
-    LaunchedEffect(targetValue) {
-        animate(
-            initialValue = animatedValue,
-            targetValue = targetValue,
-            animationSpec = tween(1000, easing = FastOutSlowInEasing)
-        ) { value, _ ->
-            animatedValue = value
+    val currencyConfig = CurrencyConfig(currencyLocale, currencySymbol)
+    
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography(),
+        content = {
+            CompositionLocalProvider(
+                LocalCurrencyConfig provides currencyConfig
+            ) {
+                content()
+            }
+        }
+    )
+}
+
+@Composable
+fun CurrencyText(
+    amount: Double,
+    style: TextStyle = MaterialTheme.typography.headlineSmall,
+    modifier: Modifier = Modifier
+) {
+    val currencyConfig = LocalCurrencyConfig.current
+    
+    val formattedAmount by remember(amount, currencyConfig) {
+        derivedStateOf {
+            NumberFormat.getCurrencyInstance(currencyConfig.locale).apply {
+                maximumFractionDigits = currencyConfig.decimalDigits
+                minimumFractionDigits = currencyConfig.decimalDigits
+                currency = java.util.Currency.getInstance(currencyConfig.locale.country)
+            }.format(amount)
         }
     }
     
     Text(
-        text = formatCurrency(animatedValue),
+        text = formattedAmount,
+        style = style,
         modifier = modifier
     )
 }
 ```
 
-#### 5. **Snackbar API**
-Built-in snackbar support with better API:
+#### 6. Category Filter with State Hoisting
 
 ```kotlin
 @Composable
-fun MyApp() {
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-    
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { padding ->
-        Button(
-            onClick = {
-                scope.launch {
-                    val result = snackbarHostState.showSnackbar(
-                        message = "Transaction added!",
-                        actionLabel = "Undo",
-                        duration = SnackbarDuration.Short
-                    )
-                    if (result == SnackbarResult.ActionPerformed) {
-                        // Undo action
-                    }
-                }
-            }
-        ) {
-            Text("Show Snackbar")
-        }
-    }
-}
-```
-
-#### 6. **Bottom Sheet Navigation**
-Native bottom sheet support:
-
-```kotlin
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun BottomSheetNavigation() {
-    val sheetState = rememberBottomSheetScaffoldState()
-    val scope = rememberCoroutineScope()
-    
-    BottomSheetScaffold(
-        scaffoldState = sheetState,
-        sheetContent = {
-            Column {
-                Text("Sheet Content")
-                Button(onClick = {
-                    scope.launch { sheetState.bottomSheetState.partialExpand() }
-                }) {
-                    Text("Collapse")
-                }
-            }
-        }
-    ) { padding ->
-        Button(
-            onClick = {
-                scope.launch { sheetState.bottomSheetState.expand() }
-            }
-        ) {
-            Text("Expand Sheet")
-        }
-    }
-}
-```
-
-#### 7. **Currency Formatting**
-Use locale-aware formatting:
-
-```kotlin
-@Composable
-fun FormattedAmount(
-    amount: Double,
-    locale: Locale = Locale.getDefault()
+fun CategoryFilter(
+    categories: List<String>,
+    selectedCategory: String?,
+    onCategorySelected: (String?) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val formatter = remember(locale) {
-        NumberFormat.getCurrencyInstance(locale).apply {
-            maximumFractionDigits = 2
-            minimumFractionDigits = 2
+    LazyRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            FilterChip(
+                selected = selectedCategory == null,
+                onClick = { onCategorySelected(null) },
+                label = { Text("All") },
+                leadingIcon = if (selectedCategory == null) {
+                    { Icon(Icons.Filled.Check, contentDescription = null) }
+                } else null
+            )
+        }
+        
+        items(categories) { category ->
+            val isSelected = selectedCategory == category
+            
+            FilterChip(
+                selected = isSelected,
+                onClick = { 
+                    onCategorySelected(if (isSelected) null else category)
+                },
+                label = { Text(category) },
+                leadingIcon = if (isSelected) {
+                    { Icon(Icons.Filled.Check, contentDescription = null) }
+                } else null
+            )
+        }
+    }
+}
+
+@Composable
+fun TransactionListScreen(
+    viewModel: TransactionListViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    
+    Column {
+        // Category filter - state hoisted to ViewModel
+        CategoryFilter(
+            categories = uiState.categories,
+            selectedCategory = uiState.selectedCategory,
+            onCategorySelected = viewModel::onCategorySelected
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Transaction list - filtered based on selected category
+        LazyColumn {
+            items(
+                items = uiState.filteredTransactions,
+                key = { it.id }
+            ) { transaction ->
+                TransactionItem(transaction = transaction)
+            }
+        }
+    }
+}
+```
+
+#### 7. Date Range Picker with rememberSaveable
+
+```kotlin
+@Composable
+fun DateRangePicker(
+    onRangeSelected: (Pair<LocalDate, LocalDate>?) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    
+    // State that survives configuration changes
+    var startDate by rememberSaveable { mutableStateOf<LocalDate?>(null) }
+    var endDate by rememberSaveable { mutableStateOf<LocalDate?>(null) }
+    
+    val calendarState = rememberCalendarState()
+    val selectionState = rememberDateRangePickerState()
+    
+    val formattedRange by remember(startDate, endDate) {
+        derivedStateOf {
+            when {
+                startDate != null && endDate != null -> {
+                    val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy")
+                    "${startDate.format(formatter)} - ${endDate.format(formatter)}"
+                }
+                startDate != null -> {
+                    val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy")
+                    "${startDate.format(formatter)} - End"
+                }
+                else -> "Select Date Range"
+            }
         }
     }
     
-    Text(
-        text = formatter.format(amount),
-        style = MaterialTheme.typography.displayMedium,
-        color = if (amount < 0) MaterialTheme.colorScheme.error 
-                else MaterialTheme.colorScheme.primary
+    OutlinedButton(
+        onClick = {
+            selectionState.setSelection(startDate, endDate)
+        },
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Text(text = formattedRange)
+        
+        Spacer(modifier = Modifier.width(8.dp))
+        
+        Icon(
+            imageVector = Icons.Default.DateRange,
+            contentDescription = "Select date range"
+        )
+    }
+    
+    LaunchedEffect(selectionState.selectedStartDateMillis, selectionState.selectedEndDateMillis) {
+        val newStartDate = selectionState.selectedStartDateMillis?.let {
+            Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date
+        }
+        val newEndDate = selectionState.selectedEndDateMillis?.let {
+            Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date
+        }
+        
+        if (newStartDate != startDate || newEndDate != endDate) {
+            startDate = newStartDate
+            endDate = newEndDate
+            
+            if (startDate != null && endDate != null) {
+                onRangeSelected(Pair(startDate, endDate))
+            }
+        }
+    }
+}
+```
+
+#### 8. Budget Progress Indicator with Animated Values
+
+```kotlin
+@Composable
+fun BudgetProgress(
+    currentAmount: Double,
+    budgetAmount: Double,
+    category: String,
+    modifier: Modifier = Modifier
+) {
+    val progress by animateFloatAsState(
+        targetValue = (currentAmount / budgetAmount).coerceIn(0f, 1f),
+        animationSpec = tween(
+            durationMillis = 800,
+            easing = FastOutSlowInEasing
+        ),
+        label = "budgetProgress"
+    )
+    
+    val isOverBudget by remember(currentAmount, budgetAmount) {
+        derivedStateOf { currentAmount > budgetAmount }
+    }
+    
+    val progressColor by animateColorAsState(
+        targetValue = when {
+            isOverBudget -> Color.Red
+            progress > 0.8f -> Color(0xFFFF9800)
+            else -> Color(0xFF4CAF50)
+        },
+        animationSpec = tween(durationMillis = 300),
+        label = "progressColor"
+    )
+    
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = category,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                
+                Text(
+                    text = "$${String.format("%.2f", currentAmount)} / $${String.format("%.2f", budgetAmount)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isOverBudget) Color.Red else MaterialTheme.colorScheme.onSurface
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(),
+                color = progressColor,
+                trackColor = progressColor.copy(alpha = 0.2f)
+            )
+            
+            if (isOverBudget) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Over budget by $${String.format("%.2f", currentAmount - budgetAmount)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Red
+                )
+            }
+        }
+    }
+}
+```
+
+### State Management Best Practices
+
+#### ViewModel with StateFlow
+
+```kotlin
+@HiltViewModel
+class TransactionViewModel @Inject constructor(
+    private val repository: TransactionRepository
+) : ViewModel() {
+    
+    private val _uiState = MutableStateFlow<TransactionUiState>(TransactionUiState())
+    val uiState: StateFlow<TransactionUiState> = _uiState.asStateFlow()
+    
+    private val _filterState = MutableStateFlow(FilterState())
+    val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
+    
+    // Combined state for filtered transactions
+    val filteredTransactions: StateFlow<List<Transaction>> = combine(
+        repository.getAllTransactions(),
+        filterState
+    ) { transactions, filter ->
+        transactions.filter { transaction ->
+            val matchesCategory = filter.selectedCategory == null || 
+                transaction.category == filter.selectedCategory
+            val matchesType = filter.selectedType == null || 
+                transaction.type == filter.selectedType
+            val matchesDateRange = when {
+                filter.startDate != null && filter.endDate != null -> 
+                    transaction.date in filter.startDate..filter.endDate
+                else -> true
+            }
+            matchesCategory && matchesType && matchesDateRange
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+    
+    fun addTransaction(transaction: Transaction) {
+        viewModelScope.launch {
+            repository.insertTransaction(transaction)
+        }
+    }
+    
+    fun updateFilter(filter: FilterState) {
+        _filterState.value = filter
+    }
+}
+
+@Immutable
+data class TransactionUiState(
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
+
+@Immutable
+data class FilterState(
+    val selectedCategory: String? = null,
+    val selectedType: TransactionType? = null,
+    val startDate: LocalDate? = null,
+    val endDate: LocalDate? = null
+)
+```
+
+### Performance Optimization Techniques
+
+#### Stable Data Classes
+
+```kotlin
+@Immutable
+data class Transaction(
+    val id: String,
+    val amount: Double,
+    val category: String,
+    val description: String,
+    val date: LocalDate,
+    val type: TransactionType
+) {
+    // Stable equals/hashCode for Compose optimization
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        
+        other as Transaction
+        return id == other.id &&
+               amount == other.amount &&
+               category == other.category &&
+               description == other.description &&
+               date == other.date &&
+               type == other.type
+    }
+    
+    override fun hashCode(): Int {
+        var result = id.hashCode()
+        result = 31 * result + amount.hashCode()
+        result = 31 * result + category.hashCode()
+        result = 31 * result + description.hashCode()
+        result = 31 * result + date.hashCode()
+        result = 31 * result + type.hashCode()
+        return result
+    }
+}
+
+@Stable
+enum class TransactionType {
+    INCOME, EXPENSE
+}
+```
+
+#### Efficient List Rendering
+
+```kotlin
+@Composable
+fun OptimizedTransactionList(
+    transactions: List<Transaction>,
+    onItemClick: (Transaction) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(vertical = 8.dp)
+    ) {
+        items(
+            items = transactions,
+            key = { it.id }  // Critical for performance
+        ) { transaction ->
+            // Each item only recomposes when its own transaction changes
+            TransactionListItem(
+                transaction = transaction,
+                onClick = onItemClick
+            )
+        }
+    }
+}
+
+@Composable
+fun TransactionListItem(
+    transaction: Transaction,
+    onClick: (Transaction) -> Unit
+) {
+    // This composable is optimized - only recomposes when transaction changes
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable { onClick(transaction) },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = transaction.description,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = transaction.category,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            CurrencyText(
+                amount = transaction.amount,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (transaction.type == TransactionType.INCOME) 
+                    Color(0xFF4CAF50) 
+                else 
+                    Color(0xFFF44336)
+            )
+        }
+    }
+}
+```
+
+### Recomposition Strategies
+
+#### Minimizing Recomposition Scope
+
+```kotlin
+@Composable
+fun ExpenseForm(
+    onSubmit: (Transaction) -> Unit
+) {
+    var amount by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    
+    // Form validation state
+    val isValid by remember(amount, category) {
+        derivedStateOf {
+            amount.isNotBlank() && 
+            category.isNotBlank() && 
+            amount.toDoubleOrNull() != null && 
+            amount.toDoubleOrNull()!! > 0
+        }
+    }
+    
+    Column(modifier = Modifier.padding(16.dp)) {
+        // Amount field - only recomposes when amount changes
+        AmountField(
+            value = amount,
+            onValueChange = { amount = it }
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Category field - only recomposes when category changes
+        CategoryField(
+            value = category,
+            onValueChange = { category = it }
+        )
+        
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Description field - only recomposes when description changes
+        DescriptionField(
+            value = description,
+            onValueChange = { description = it }
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Submit button - only recomposes when isValid changes
+        Button(
+            onClick = {
+                onSubmit(
+                    Transaction(
+                        id = UUID.randomUUID().toString(),
+                        amount = amount.toDouble(),
+                        category = category,
+                        description = description,
+                        date = LocalDate.now(),
+                        type = TransactionType.EXPENSE
+                    )
+                )
+            },
+            enabled = isValid,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Add Transaction")
+        }
+    }
+}
+
+// Separate composables for better recomposition control
+@Composable
+fun AmountField(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text("Amount") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        modifier = Modifier.fillMaxWidth(),
+        isError = value.isNotBlank() && (value.toDoubleOrNull() == null || value.toDoubleOrNull()!! <= 0),
+        supportingText = {
+            if (value.isNotBlank() && value.toDoubleOrNull() == null) {
+                Text("Please enter a valid amount")
+            }
+        }
     )
 }
 ```
 
-### Common Mistakes to Avoid
+### Side Effects Handling
 
-1. **❌ Don't forget to handle null states**
-   ```kotlin
-   // Bad - may crash
-   Text(transaction.category!!)
-   
-   // Good - safe access
-   Text(transaction.category ?: "Uncategorized")
-   ```
+#### LaunchedEffect for One-time Events
 
-2. **❌ Don't block the main thread with calculations**
-   ```kotlin
-   // Bad
-   val result = expensiveCalculation(transactions)
-   
-   // Good
-   val result by produceState(initialValue = null) {
-       value = withContext(Dispatchers.Default) {
-           expensiveCalculation(transactions)
-       }
-   }
-   ```
+```kotlin
+@Composable
+fun TransactionDetailScreen(
+    transactionId: String,
+    viewModel: TransactionDetailViewModel = hiltViewModel()
+) {
+    val transaction by viewModel.transaction.collectAsState()
+    
+    // Load transaction when transactionId changes
+    LaunchedEffect(transactionId) {
+        viewModel.loadTransaction(transactionId)
+    }
+    
+    // Track screen view
+    LaunchedEffect(Unit) {
+        viewModel.trackScreenView("TransactionDetail")
+    }
+    
+    when {
+        transaction.isLoading -> CircularProgressIndicator()
+        transaction.error != null -> ErrorMessage(message = transaction.error)
+        transaction.data != null -> TransactionDetailView(transaction = transaction.data!!)
+    }
+}
+```
 
-3. **❌ Don't recreate expensive objects**
-   ```kotlin
-   // Bad - recreated every composition
-   val formatter = NumberFormat.getCurrencyInstance()
-   
-   // Good - cached with remember
-   val formatter = remember { NumberFormat.getCurrencyInstance() }
-   ```
+#### DisposableEffect for Resource Management
 
-4. **❌ Don't ignore state hoisting**
-   ```kotlin
-   // Bad - state trapped in composable
-   @Composable
-   fun ExpenseList() {
-       var filter by remember { mutableStateOf("all") }
-       // Can't access filter from outside
-   }
-   
-   // Good - hoisted state
-   @Composable
-   fun ExpenseList(
-       filter: String,
-       onFilterChange: (String) -> Unit
-   ) {
-       // State can be controlled from parent
-   }
-   ```
+```kotlin
+@Composable
+fun RealTimeExpenseUpdates(
+    onNewExpense: (Transaction) -> Unit
+) {
+    val context = LocalContext.current
+    
+    DisposableEffect(Unit) {
+        val connectivityManager = context.getSystemService(
+            Context.CONNECTIVITY_SERVICE
+        ) as ConnectivityManager
+        
+        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                // Resume real-time updates
+            }
+            
+            override fun onLost(network: Network) {
+                // Pause real-time updates
+            }
+        }
+        
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        
+        connectivityManager.registerNetworkCallback(request, networkCallback)
+        
+        onDispose {
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        }
+    }
+}
+```
 
 ---
 
-## 📦 Installation
+## 🚀 Getting Started
 
+### Prerequisites
+
+- Android Studio Hedgehog | 2023.1.1 or later
+- JDK 17
+- Android SDK 24+
+
+### Installation
+
+1. Clone the repository:
 ```bash
 git clone https://github.com/kyva1125/android-expenseflow.git
 cd android-expenseflow
+```
+
+2. Open the project in Android Studio
+
+3. Sync Gradle files
+
+4. Run on emulator or physical device
+
+### Build
+
+```bash
 ./gradlew assembleDebug
 ```
 
-### Requirements
-
-- Android Studio Hedgehog or later
-- JDK 17
-- Android SDK 35
-- Gradle 8.0+
-
----
-
-## 🔑 Environment Variables
-
-No external API keys required - fully offline capable.
-
----
-
-## 🧪 Testing
+### Run Tests
 
 ```bash
-# Unit tests
 ./gradlew test
-
-# Instrumented tests
 ./gradlew connectedAndroidTest
-
-# UI tests
-./gradlew connectedDebugAndroidTest
 ```
 
 ---
 
-## 📸 Screenshots
+## 📖 Key Compose Concepts Used
 
-> **Coming Soon** - Screenshots demonstrating analytics dashboard and transaction flows
+- **Declarative UI** - UI is a function of state
+- **Composition** - Describe the UI once, Compose handles updates
+- **Recomposition** - Smart recomposition only updates what changed
+- **State Hoisting** - State managed at the lowest common parent
+- **Side Effects** - Controlled execution of non-compose code
+- **Immutable Data** - State objects are immutable for thread safety
+- **Stability** - Compose compiler optimizations for performance
+- **Custom Canvas** - Drawing custom charts and visualizations
+- **Animation API** - Smooth transitions and animations
 
 ---
 
-## 🎓 Learning Resources
+## 🤝 Contributing
 
-- [Jetpack Compose Basics](https://developer.android.com/courses/jetpack-compose/course)
-- [Compose for Flutter Developers](https://developer.android.com/jetpack/compose/mental-model)
-- [State in Compose](https://developer.android.com/jetpack/compose/state)
-- [Graphics in Compose](https://developer.android.com/jetpack/compose/graphics)
-- [Compose Animations](https://developer.android.com/jetpack/compose/animations)
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) for details
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ---
 
-## 👤 Author
+## 👨‍💻 Author
 
-**Nick Ledesma**  
-- 🐙 [GitHub](https://github.com/kyva1125)  
-- 📧 Contact: [GitHub Issues](https://github.com/kyva1125/android-expenseflow/issues)
+**Nick Ledesma** - Jetpack Compose Expert
+
+- GitHub: [@kyva1125](https://github.com/kyva1125)
 
 ---
 
-## 🙏 Acknowledgments
+## 🌟 Showcasing Advanced Compose Expertise
 
-Built with modern Android best practices, transitioning from Flutter to Jetpack Compose. Demonstrates expertise in:
+This project demonstrates deep knowledge of Jetpack Compose including:
 - Complex form handling with validation
-- Custom data visualization
-- Reactive programming with Flows
-- State hoisting patterns
-- Animation and transitions
-- Clean Architecture principles
-- Offline-first data strategies
+- Custom chart components with Canvas API
+- Real-time data visualization
+- Reactive state management with StateFlow
+- Advanced animation techniques
+- Swipe-to-delete gestures
+- Date range pickers
+- Currency formatting with CompositionLocal
+- Performance optimization with stable types
+- Material3 design system integration
+- Modern Android architecture (MVVM, Clean Architecture)
+- Reactive programming with Kotlin Flow
+- Dependency injection with Hilt
+- Offline-first data persistence with Room
 
----
-
-<div align="center">
-
-**Built with ❤️ using Kotlin & Jetpack Compose**  
-**Branding: Beniel Studio**
-
-</div>
+Built with ❤️ using Jetpack Compose
